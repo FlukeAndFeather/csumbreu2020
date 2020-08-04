@@ -1,0 +1,209 @@
+---
+title: "Global biodiversity of marine mammals"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(ape)
+library(fasterize)
+library(ggtree)
+library(picante)
+library(raster)
+library(rotl)
+library(sf)
+library(tidyverse)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+*CSUMB REU 2020*  
+*Introduction to Coding for Emerging Geoscientists Workshop*  
+*August 5, 2020*
+
+## Introduction
+
+In this part of the workshop, we will use computational tools for a geospatial
+analysis of marine mammal biodiversity. Drawing on the concepts of phylogeny and
+thermal physiology, we will map two different metrics of marine mammal 
+biodiversity to test the metabolic asymmetry hypothesis. For more details, see:
+
+Grady, J. M., Maitner, B. S., Winter, A. S., Kaschner, K., Tittensor, D. P., 
+Record, S., ... & Wearing, H. J. (2019). Metabolic asymmetry and the global 
+diversity of marine predators. *Science*, 363(6425).
+
+## Loading data
+
+The data for this analysis are all publicly available: 
+
+  * Species range maps: International Union for Conservation of Nature (IUCN)
+  www.iucnredlist.org
+  * Phylogeny: Upham, N. S., Esselstyn, J. A., & Jetz, W. (2019). Inferring the 
+  mammal tree: Species-level sets of phylogenies for questions in ecology, 
+  evolution, and conservation. *PLOS Biology*, 17(12), e3000494.
+  * Coastlines: Natural Earth www.naturalearthdata.com
+  
+The following chunk loads each of the three data sources. You should see a range
+map of the northern bottlenose whale after running it.
+
+```{r load}
+# Ranges
+marmam_shp <- st_read("data/marmam.shp")
+# Phylogeny
+marmam_tr <- read.tree("data/marmam.nex")
+# Coastlines
+coastline_shp <- st_read("data/coastline.shp")
+
+# Range of the northern bottlenose whale
+ggplot(filter(marmam_shp, BINOMIAL == "Hyperoodon ampullatus")) +
+  geom_sf(fill = "darkblue") +
+  geom_sf(data = coastline_shp) +
+  theme_void()
+```
+
+**Exercise 1**: make a range map for Hector's dolphin.
+
+## Spatial data types
+
+Spatial data can be represented in two ways: as *vectors* (points, lines, and
+polygons) or *rasters* (a rectangular grid of cells). Vectors can represent fine
+details better than rasters, but most computational analyses require data in
+raster form. Here we're going to convert the vector representation of all the
+marine mammal ranges to a *raster brick*, which is basically a bunch of rasters 
+with the same grid stacked on top of each other.
+
+When dealing with rasters, we will *project* our spatial data. Since maps are 2D
+but the earth is 3D, all maps approximations that warp and twist a sphere onto a
+flat piece of paper. Don't worry about the details. If you take a GIS class you
+will learn all about it.
+
+```{r raster}
+# We'll use the Behrmann equal area projection for all our rasters
+cea_proj4 <- "+proj=cea +lon_0=0 +lat_ts=30 +x_0=0 +y_0=0 +datum=WGS84 +ellps=WGS84 +units=km +no_defs"
+
+# Then we create a raster template to define extent and resolution
+template <- raster(
+  crs = CRS("+proj=longlat +datum=WGS84"),
+  xmn = -180, xmx = 180,
+  ymn = -90, ymx = 90
+) %>% 
+  { suppressWarnings(projectRaster(., crs = cea_proj4)) }
+res(template) <- 110
+
+# Finally we rasterize the marine mammal ranges. The resulting brick has a layer 
+# for each species.
+marmam_rb <- fasterize(
+  st_transform(marmam_shp, cea_proj4),
+  template,
+  by = "BINOMIAL",
+  background = 0
+) 
+names(marmam_rb) <- str_replace(names(marmam_rb), "\\.", "_")
+
+# Plot the raster representation of the northern bottlenose whale range
+nbw_rng <- marmam_rb[[which(names(marmam_rb) == "Hyperoodon_ampullatus")]]
+ggplot() +
+  geom_sf(data = st_transform(coastline_shp, cea_proj4)) +
+  geom_raster(aes(x, y, alpha = Hyperoodon_ampullatus == 1),
+              as.data.frame(nbw_rng, xy = TRUE),
+              fill = "darkblue") +
+  scale_alpha_manual(values = c(0, 1)) +
+  theme_void() +
+  theme(legend.position = "none")
+```
+
+**Excerise 2**: how big are the raster cells and how many are there? Hint: use
+the `res` and `ncell` functions at the console.
+
+## Alpha diversity
+
+Now that we have our range data in raster format, we're ready for computational
+methods. In this case, we want to know the *alpha diversity* of marine mammals.
+If you recall, alpha diversity is the number of species in a community. We'll
+treat each grid cell as a community and count the overlapping ranges.
+
+**Exercise 3**: fill in "???" with the correct variable. What's the highest 
+alpha diversity value and (roughly) where is it located?
+
+```{r alpha}
+marmam_alpha <- sum(???, na.rm = TRUE)
+plot(marmam_alpha)
+```
+
+## Phylogenetic diversity
+
+As discussed earlier, alpha diversity is not the only biodiversity metric. 
+Faith's phylogenetic diversity (PD) is correlated with alpha diversity, but it 
+better represents the evolutionary relationships in communities. We're going to
+use a phylogenetic tree to calculate PD.
+
+```{r phylo}
+marmam_tr <- read.tree("data/marmam2.nex")
+tree_from_xy <- function(x, y) {
+  pt <- data.frame(x = x, y = y) %>% 
+    st_as_sf(coords = 1:2, crs = 4326) %>% 
+    st_transform(cea_proj4) %>% 
+    st_coordinates()
+  sp <- names(marmam_rb)[extract(marmam_rb, pt) == 1]
+  n_sp <- length(sp)
+  marmam_tr %>% 
+    keep.tip(sp) %>% 
+    plot(main = sprintf("(%.1f\u00B0, %.1f\u00B0)", y, x),
+         sub = sprintf("%d species", n_sp))
+}
+```
+
+**Exercise 4**: use the `tree_from_xy` function to figure out how many cetacean 
+and pinniped species are found in these locations:
+
+  * 100 miles west of Montery
+  * The Mediterranean Sea
+  * Hudson Bay
+  
+With this tree, we can now calculate and map PD of marine mammals globally. 
+Expect this chunk to run for a longer time.
+
+```{r pd}
+marmam_mtx <- map(seq(nlayers(marmam_rb)), ~ as.vector(marmam_rb[[.x]])) %>% 
+  do.call(cbind, .)
+colnames(marmam_mtx) <- names(marmam_rb)
+rownames(marmam_mtx) <- seq(ncell(marmam_rb))
+empty_rows <- apply(marmam_mtx, 1, function(row) all(is.na(row)))
+marmam_pd_tbl <- pd(marmam_mtx[!empty_rows, ], marmam_tr) %>% 
+  as_tibble(rownames = "i") %>% 
+  mutate(i = as.numeric(i)) %>% 
+  complete(i = seq(ncell(marmam_rb)))
+marmam_pd_r <- setValues(template, marmam_pd_tbl$PD)
+marmam_pd_tbl <- marmam_pd_r %>% 
+  as.data.frame(xy = TRUE) %>% 
+  rename(pd = layer)
+
+ggplot() +
+  geom_raster(aes(x, y, fill = pd, alpha = pd == 0), marmam_pd_tbl) +
+  geom_sf(data = coastline_shp) +
+  scale_fill_gradientn("PD",
+                       colors = c("dark blue", "light blue", "pink", "red")) +
+  scale_alpha_manual(values = c(1, 0), guide = FALSE) +
+  theme_void() +
+  theme(legend.direction = "horizontal",
+        legend.position = "bottom")
+```
+
+**Exercise 5**: approximately how long did it take to calculate PD manually for 
+one community? If oceans cover 70% of the earth, how long would it take to 
+calculate PD by hand for every oceanic grid cell?
+
+**Exercise 6**: where is marine mammal PD highest? How does that compare to 
+alpha diversity?
+
+**Exercise 7**: the `tree_from_xy` function again, investigate the difference
+between PD and alpha diversity. What pattern do you see in regions with high
+alpha diversity and low PD? How about in regions with low alpha/high PD? You'll
+probably have to google the common names of species to figure this out.
+
+**Exercise 8**: how would the metabolic asymmetry hypothesis explain the 
+global patterns in marine mammal PD? How would you expect a map of predatory 
+fish PD to look different from the marine mammal map?
+
+**Optional exercise**: all the data needed to map the phylogenetic diversity of
+fish is included in this project. Using this .Rmd file as a guide, create the
+PD map for fish and compare it to your predictions from exercise 8.
+
