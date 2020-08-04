@@ -6,7 +6,6 @@ output: html_document
 ```{r setup, include=FALSE}
 library(ape)
 library(fasterize)
-library(ggtree)
 library(picante)
 library(raster)
 library(rotl)
@@ -136,7 +135,7 @@ better represents the evolutionary relationships in communities. We're going to
 use a phylogenetic tree to calculate PD.
 
 ```{r phylo}
-marmam_tr <- read.tree("data/marmam2.nex")
+marmam_tr <- read.tree("data/marmam.nex")
 tree_from_xy <- function(x, y) {
   pt <- data.frame(x = x, y = y) %>% 
     st_as_sf(coords = 1:2, crs = 4326) %>% 
