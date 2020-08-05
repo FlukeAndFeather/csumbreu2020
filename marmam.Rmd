@@ -198,9 +198,10 @@ between PD and alpha diversity. What pattern do you see in regions with high
 alpha diversity and low PD? How about in regions with low alpha/high PD? You'll
 probably have to google the common names of species to figure this out.
 
-**Exercise 8**: how would the metabolic asymmetry hypothesis explain the 
-global patterns in marine mammal PD? How would you expect a map of predatory 
-fish PD to look different from the marine mammal map?
+**Exercise 8**: how would metabolic asymmetry between ectothermic prey and 
+endothermic predators explain the global patterns in marine mammal PD? How would 
+you expect a map of predatory fish PD to look different from the marine mammal 
+map?
 
 **Optional exercise**: all the data needed to map the phylogenetic diversity of
 fish is included in this project. Using this .Rmd file as a guide, create the
