@@ -141,13 +141,15 @@ tree_from_xy <- function(x, y) {
     st_as_sf(coords = 1:2, crs = 4326) %>% 
     st_transform(cea_proj4) %>% 
     st_coordinates()
-  sp <- names(marmam_rb)[extract(marmam_rb, pt) == 1]
+  sp <- names(marmam_rb)[raster::extract(marmam_rb, pt) == 1]
   n_sp <- length(sp)
   marmam_tr %>% 
     keep.tip(sp) %>% 
     plot(main = sprintf("(%.1f\u00B0, %.1f\u00B0)", y, x),
          sub = sprintf("%d species", n_sp))
 }
+# As an example, the marine mammals off the coast of California
+tree_from_xy(-125, 35)
 ```
 
 **Exercise 4**: use the `tree_from_xy` function to figure out how many cetacean 
